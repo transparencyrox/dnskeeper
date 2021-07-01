@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Heroku pipeline (compile)
+
+if [ -z "$1" ]; then
+  echo "$0 <build-dir> <cache-dir>"
+  exit -1
+fi
+
+set -e
+set -o pipefail
+
+mkdir -p "$1" "$2"
+build=$(cd "$1/" && pwd)
+cache=$(cd "$2/" && pwd)
+
+env_dir="${3}"
+unit_paths=""
+
+function build() {
+  unit=$1
+  git_url=$2
+  install_dir=$3
+  build_flags=$4
+  if ! [ -d "$install_dir" ]; then
+    echo "Building $unit"
+    mkdir -p $cache/$unit/source || true
+    cd $cache/$unit/source
+    git clone --recurse-submodules $git_url . || true
+    cmake -DCMAKE_INSTALL_PREFIX=$install_dir $build_flags
+    make -j 4 && make install
+  fi
+  unit_paths="$unit_paths -D$unit=$install_dir"
+}
+
+# Note: The build folder on Heroku gets relocated per build
+#       The cache folder gets repopulated with binaries but
+#       changes its path, which makes linking to C++ onerous
+#       We just pull the cache and do a make install. It 
+#       slightly lengthens build time for the app but keeps
+#       dependent library link paths stable
+
+build "AWS_SDK" \
+  "https://github.com/aws/aws-sdk-cpp" \
+  "$build/aws_sdk" \
+  "-DENABLE_TESTING=OFF -DCMAKE_CXX_STANDARD=17 -DCUSTOM_MEMORY_MANAGEMENT=0 -DBUILD_ONLY=route53"
+
+build "PQXX_SDK" \
+  "https://github.com/jtv/libpqxx.git" \
+  "$build/pqxx" \
+  "-DSKIP_BUILD_TEST=on -DCMAKE_CXX_STANDARD=17 -DPostgreSQL_TYPE_INCLUDE_DIR=/usr/include/postgresql"
+
+echo "Component paths: $unit_paths)"
+
+cd $build
+echo "Configuring build with CMake (path: $build/app)"
+cmake -B $build/app_cache -DCMAKE_INSTALL_PREFIX=$build/app $unit_paths .
+
+# Application CICD pipeline
+cd $build/app_cache
+make 2>&1
+make test 2>&1
+make install 2>&1 
+
+# Remove application objects to shrink dyno size
+rm -rf $build/app_cache

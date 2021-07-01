@@ -1,0 +1,85 @@
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans&family=Roboto&display=swap');
+
+body {
+    display: grid;
+    grid-template-areas:
+    "header header header"
+    "leftbar article rightbar"
+    "footer footer footer";
+    grid-template-rows: 60px 1fr 60px;
+    grid-template-columns: 15% 1fr 15%;
+    height: 100vh;
+    margin: 0;
+}
+
+#hdr {
+    grid-area: header;
+}
+
+#ftr {
+    grid-area: footer;
+}
+
+#content {
+    grid-area: article;
+}
+
+#leftbar {
+    grid-area: leftbar;
+}
+
+#rightbar {
+    grid-area: rightbar;
+}
+
+.blink {
+    animation: blinker 1s linear infinite;
+}
+
+@keyframes blinker {
+    50% {
+        opacity: 0;
+    }
+}
+
+tr.flagged {
+    background-color: #a83246;
+    color: white;
+}
+
+H2 {
+    font-family: 'Roboto', sans-serif;
+    font-size: '25px';
+    margin: '20px';
+}
+
+H4 {
+    font-family: 'Roboto', sans-serif;
+    font-size: '9px';
+    font-weight: normal;
+    margin: '20px';
+}
+
+table.basic {
+    border: 2px solid #FFFFFF;
+    width: 50%;
+    text-align: left;
+    border-collapse: collapse;
+    font-family: 'Open Sans', sans-serif;
+}
+
+table.basic td,
+table.basic th {
+    font-size: 10px;
+    padding: 3px 4px;
+}
+
+table.basic thead {
+    border-bottom: 4px solid #333333;
+}
+
+table.basic thead th {
+    font-size: 10px;
+    font-weight: normal;
+    text-align: left;
+}

@@ -1,0 +1,102 @@
+@startuml
+' PlantUML sequence diagram for the system
+
+'
+'  --[ Note: These sequence diagrams evolve continuously so please don't take them as final as yet ]--
+'
+
+actor user
+boundary endpoint
+entity SrvCache
+entity DnsHandler
+database postgres
+entity route53
+title Showing all 'A' entries on domain and matching them to our server records
+
+user -> endpoint : Access URL
+endpoint -> user : Index Page
+user -> endpoint ++ : dns/
+endpoint -> DnsHandler ++ : GetDNSRecords
+DnsHandler -> route53 : List Current Entries
+route53 -> DnsHandler : Resource Records - nyc.domain.com + multiple IPs
+DnsHandler -> DnsHandler : Process list locally
+DnsHandler -> endpoint -- : DnsList(subdomain, server_ip, cluster_id, cluster_name)
+endpoint -> SrvCache ++ : ClusterList(subdomains)
+postgres <-> SrvCache : SELECT * FROM SERVERS WHERE CLUSTER_ID IN (subdomains) : (subdomain, friendly_name, server_ip)
+SrvCache -> SrvCache : Iterate all DNS entries: Get all rows + missing
+endpoint -> user : Construct and return DNS page
+
+@enduml
+
+@startuml
+
+actor user
+boundary endpoint
+entity SrvCache
+entity DnsHandler
+database postgres
+entity route53
+title Showing all servers in our database
+
+user -> endpoint : Access URL
+endpoint -> user : Index Page
+user -> endpoint ++ : servers/
+endpoint -> SrvCache ++ : GetAllServers
+SrvCache <-> postgres : Get Servers Joined with Cluster Table
+SrvCache -> endpoint -- : ServerList(server_id, friendly_name, cluster_id, server_ip)
+endpoint -> DnsHandler ++ : GetDNSRecords
+DnsHandler -> route53 : List Current Entries
+route53 -> DnsHandler : Resource Records - nyc.domain.com + multiple IPs
+DnsHandler -> DnsHandler : Process list locally
+DnsHandler -> endpoint -- : DnsList(subdomain, server_ip, cluster_id, cluster_name)
+endpoint <-> endpoint : Iterate ServerList and tag missing IP from DnsList for page
+endpoint -> user -- : Servers page
+
+@enduml
+
+
+@startuml
+
+boundary endpoint
+entity DnsHandler
+entity route53
+title Add DNS record (existing subdomain)
+
+endpoint -> DnsHandler : Add records (name, ip)
+DnsHandler -> route53 : GetResourceRecord (name)
+route53 -> DnsHandler : Single domain record
+DnsHandler -> DnsHandler : CheckForDupesAndAddIp(domain record, ip)
+DnsHandler -> route53 : ChangeResourceRecord (upsert)
+
+@enduml
+
+@startuml
+
+boundary endpoint
+entity DnsHandler
+entity route53
+title Add DNS record (non-existant subdomain)
+
+endpoint -> DnsHandler : Add records (name, ip)
+DnsHandler -> route53 : GetResourceRecord (name)
+route53 -> DnsHandler : (No domain found)
+DnsHandler -> DnsHandler : Create domain and add ip(name, ip)
+DnsHandler -> route53 : ChangeResourceRecord (record)
+
+@enduml
+
+@startuml
+
+boundary endpoint
+entity DnsHandler
+entity route53
+title Delete DNS record (existing subdomain)
+
+endpoint -> DnsHandler : Delete records (name, ip)
+DnsHandler -> route53 : GetResourceRecord (name)
+route53 -> DnsHandler : Single domain record
+DnsHandler -> DnsHandler : CheckForAndRemove(domain record, ip)
+DnsHandler -> route53 : IfOnlyResourceRecord -> Delete 
+DnsHandler -> route53 : IfOtherResourceRecords -> Upsert
+
+@enduml

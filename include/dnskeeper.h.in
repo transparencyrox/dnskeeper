@@ -1,0 +1,194 @@
+// vim: ft=cpp smartindent tabstop=4 shiftwidth=4 expandtab
+#pragma once
+
+
+#include <array>
+#include <chrono>
+#include <cstdint>
+#include <cstring>
+#include <exception>
+#include <filesystem>
+#include <fstream>
+#include <functional>
+#include <string>
+#include <type_traits>
+#include <vector>
+#include <thread>
+#include <mutex>
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#include <aixlog.hpp>
+#pragma GCC diagnostic pop
+
+using namespace std::literals::chrono_literals;
+
+#define NANOSECOND(x) std::chrono::nanoseconds(x).count()
+#define DNSKEEPER_VERSION "@DNSKEEPER_VERSION@"
+#define DNSKEEPER_DEFAULT_PORT "@DNSKEEPER_DEFAULT_PORT@"
+#define DNSKEEPER_DEFAULT_BUFFER_SIZE @DNSKEEPER_DEFAULT_BUFFER_SIZE @
+
+
+namespace {
+
+template <typename T>
+typename std::enable_if<std::is_same<T, bool>::value, void>::type
+cast(const std::string &data, T &target)
+{
+    if (data.length() < 1)
+        return false;
+    switch (data[0])
+    {
+        // True and Yes
+        case 't':
+        case 'T':
+        case 'y':
+        case 'Y':
+        {
+            target = true;
+            return true;
+        }
+
+        // False and No
+        case 'f':
+        case 'F':
+        case 'n':
+        case 'N':
+        {
+            target = false;
+            return true;
+        }
+    }
+    return false;
+}
+
+template <typename T>
+typename std::enable_if<std::is_floating_point<T>::value, bool>::type
+cast(const std::string &data, T &target)
+{
+    const auto min = std::numeric_limits<T>::min();
+    const auto max = std::numeric_limits<T>::max();
+
+    try {
+        auto value = std::stold(data);
+
+        // Safe assignment 
+        if((min <= value) && (value <= max))
+            target = static_cast<T>(value);
+        return true;
+    } catch(std::exception& x) {
+        // Failed conversion to target type
+    }
+
+    return false;
+}
+
+template <typename T>
+typename std::enable_if<std::is_integral<T>::value, bool>::type
+cast(const std::string &data, T &target)
+{
+    const auto min = std::numeric_limits<T>::min();
+    const auto max = std::numeric_limits<T>::max();
+
+    try {
+        auto value = std::strtoll(data.c_str(), nullptr, 10);
+
+        // Safe assignment 
+        if((min <= value) && (value <= max))
+            target = static_cast<T>(value);
+        return true;
+    } catch(std::exception& x) {
+        // Failed conversion to target type
+    }
+
+    return false;
+}
+
+template <typename T>
+typename std::enable_if<std::is_same<T, std::string>::value, bool>::type
+cast(const std::string &data, T &target)
+{
+    target = data;
+    return true;
+}
+
+} // anonymous namespace (private)
+
+template<typename T>
+inline bool secure_config(const std::string &varname, T &target, unsigned max_len = 100)
+{
+    // Checks for privilege escalation. Doesnt matter on a cloud
+    // based system but does matter on a bare metal server
+    const char *data = secure_getenv(varname.c_str());
+    if (!data)
+        return false;
+
+    std::string verify(data);
+    if (verify.length() > max_len)
+        return false;
+
+    // Safe casts to protect against overflows and invalid data
+    return cast(verify, target);
+}
+
+inline bool configured_properly()
+{
+    // Checks environment variables that need to exist
+    // Note: TEST_DATABASE is required explicitly so that
+    //       there is clarity that prod and test are different
+    const char *required_params[] = {
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_DEFAULT_REGION",
+        "DOMAIN_NAME",
+        "TEST_DATABASE",
+        "DATABASE_URL"};
+    for (auto param : required_params)
+        if (!getenv(param))
+        {
+            LOG(ERROR) << param << " environment variable missing\n";
+            return false;
+        }
+    
+    std::string testdb = "";
+    std::string proddb = "";
+    if(secure_config("TEST_DATABASE", testdb) && secure_config("DATABASE_URL", proddb)) {
+        if(testdb == proddb)
+        {
+            LOG(ERROR) << "Test and production databases cannot be the same\n";
+            return false;
+        }
+    }
+    return true;
+}
+
+inline void init_log()
+{
+    const char *loglvl = getenv("LOG_LEVEL");
+    if (!loglvl)
+        AixLog::Log::init<AixLog::SinkCout>(AixLog::Severity::notice);
+    else
+    {
+        AixLog::Log::init<AixLog::SinkCout>(AixLog::to_severity(loglvl));
+    }
+}
+
+class path_exception : public std::exception
+{
+    private:
+        const std::string m_fname;
+        const std::string m_msg;
+
+    public:
+        path_exception(const std::string& fname, const std::string& msg) 
+            : m_fname(fname), m_msg(msg) 
+        {}
+
+        virtual const char *what() const throw() override
+        {
+            std::ostringstream oss;
+            oss << "[Exception] " << m_fname << " " << m_msg;
+            return oss.str().c_str();
+        }
+};
+

@@ -1,0 +1,12 @@
+application:
+    name: TestDataGen
+    loglevel: DEBUG
+    database:
+        host: ec2-34-230-115-172.compute-1.amazonaws.com
+        database: d3heavlgf11dlr
+        user: __REDACTED__
+        password: __REDACTED__
+    aws:
+        hosted_zone: pyrotechnics.com
+        aws_access_key_id: '__REDACTED__'
+        aws_secret_access_key: '__REDACTED__'

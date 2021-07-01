@@ -1,0 +1,1 @@
+web: cd app && ./bin/main $PORT
