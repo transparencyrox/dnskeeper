@@ -1,6 +1,6 @@
 # DNS Keeper
 
-This is a system that allows manipulation of 'A' records on Route53. It runs off the Heroku free tier
+This is a system that allows manipulation of 'A' records on Route53. It runs off the Heroku free tier and offers an Express way to manage DNS (might be useful if you run a VPN e.g.)
 
 ### Required configuration variables
 - AWS_SECRET_ACCESS_KEY
